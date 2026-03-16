@@ -75,7 +75,7 @@ Managing Java truststores is often more awkward than it needs to be. This projec
   - PEM/text view
 - Copy details to the clipboard
 - Export selected certificates as `.cer` or `.pem`
-- Show chain-building diagnostics, likely issuer matches, and trust-anchor information
+- Show a visual trust chain panel with issuer hierarchy and badges such as Trusted, Missing issuer, Self-signed, and Root in store`r`n- Show chain-building diagnostics, likely issuer matches, and trust-anchor information
 
 ### Editing and safety
 

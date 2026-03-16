@@ -10,6 +10,7 @@ public record ChainAnalysisResult(
         boolean missingIssuer,
         String trustAnchorAlias,
         List<String> chainSubjects,
-        List<String> diagnostics
+        List<String> diagnostics,
+        List<ChainAnalysisNode> nodes
 ) {
 }

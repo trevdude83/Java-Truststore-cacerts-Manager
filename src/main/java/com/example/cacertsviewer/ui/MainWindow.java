@@ -4,6 +4,7 @@ import com.example.cacertsviewer.model.BackupRecord;
 import com.example.cacertsviewer.model.CertificateRecord;
 import com.example.cacertsviewer.model.TrustStoreDocument;
 import com.example.cacertsviewer.service.BackupService;
+import com.example.cacertsviewer.service.ChainAnalysisNode;
 import com.example.cacertsviewer.service.ChainAnalysisResult;
 import com.example.cacertsviewer.service.ChainAnalysisService;
 import com.example.cacertsviewer.service.PasswordAwareLoadResult;
@@ -19,6 +20,7 @@ import javafx.collections.transformation.FilteredList;
 import javafx.collections.transformation.SortedList;
 import javafx.geometry.Insets;
 import javafx.geometry.Orientation;
+import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.*;
 import javafx.scene.input.Clipboard;
@@ -39,6 +41,10 @@ import java.util.Locale;
 import java.util.Optional;
 
 public class MainWindow {
+    private static final double CHAIN_ROW_ESTIMATE = 88;
+    private static final double CHAIN_PANEL_MIN_HEIGHT = 110;
+    private static final double CHAIN_PANEL_MAX_HEIGHT = 260;
+
     private final Stage stage;
     private final BorderPane root = new BorderPane();
     private final TrustStoreService trustStoreService = new TrustStoreService();
@@ -53,6 +59,9 @@ public class MainWindow {
     private final TableView<CertificateRecord> table = new TableView<>();
     private final TextField searchField = new TextField();
     private final TextArea detailsArea = new TextArea();
+    private final TreeView<ChainAnalysisNode> chainTree = new TreeView<>();
+    private final StackPane chainTreeWrapper = new StackPane();
+    private final Label chainSummaryLabel = new Label("Select a certificate to inspect its trust chain.");
     private final Label statusLabel = new Label("Open a truststore to begin.");
     private final Label pathLabel = new Label("No truststore loaded");
     private final Label bannerLabel = new Label();
@@ -109,11 +118,27 @@ public class MainWindow {
         searchField.setPromptText("Search alias, subject, issuer, serial, or thumbprint");
 
         configureTable();
+        configureChainTree();
         detailsArea.setEditable(false);
         detailsArea.setWrapText(true);
         detailsArea.getStyleClass().add("details-area");
 
+        VBox chainBox = new VBox(8,
+                sectionTitle("Trust Chain"),
+                chainSummaryLabel,
+                chainTreeWrapper
+        );
+        chainBox.getStyleClass().add("chain-panel");
+        chainBox.setPadding(new Insets(14));
+        chainTreeWrapper.getStyleClass().add("chain-tree-wrapper");
+        chainTreeWrapper.setMinHeight(CHAIN_PANEL_MIN_HEIGHT);
+        chainTreeWrapper.setPrefHeight(CHAIN_PANEL_MIN_HEIGHT);
+        chainTreeWrapper.setMaxHeight(CHAIN_PANEL_MAX_HEIGHT);
+        StackPane.setAlignment(chainTree, Pos.CENTER);
+        VBox.setVgrow(chainTreeWrapper, Priority.NEVER);
+
         VBox detailsBox = new VBox(10,
+                chainBox,
                 sectionTitle("Certificate Details"),
                 detailsArea,
                 new HBox(10, copyButton, detailExportButton)
@@ -126,13 +151,61 @@ public class MainWindow {
         VBox.setVgrow(table, Priority.ALWAYS);
 
         SplitPane splitPane = new SplitPane(centerBox, detailsBox);
-        splitPane.setDividerPositions(0.62);
+        splitPane.setDividerPositions(0.58);
         root.setCenter(splitPane);
 
         HBox statusBar = new HBox(16, statusLabel, new Separator(Orientation.VERTICAL), pathLabel);
         statusBar.getStyleClass().add("status-bar");
         statusBar.setPadding(new Insets(10, 16, 10, 16));
         root.setBottom(statusBar);
+    }
+
+    private void configureChainTree() {
+        chainTree.setShowRoot(false);
+        chainTree.setFixedCellSize(78);
+        chainTree.setMinHeight(Region.USE_PREF_SIZE);
+        chainTree.setMaxHeight(Region.USE_PREF_SIZE);
+        chainTree.getStyleClass().add("chain-tree");
+        chainTree.setCellFactory(ignore -> new TreeCell<>() {
+            @Override
+            protected void updateItem(ChainAnalysisNode item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setGraphic(null);
+                    return;
+                }
+
+                Label subjectLabel = new Label(item.subject());
+                subjectLabel.getStyleClass().add("chain-subject");
+
+                String metaText = item.role() + (item.alias() == null ? "" : "  |  alias: " + item.alias());
+                Label metaLabel = new Label(metaText);
+                metaLabel.getStyleClass().add("chain-meta");
+
+                FlowPane badgePane = new FlowPane();
+                badgePane.setHgap(6);
+                badgePane.setVgap(6);
+                for (String badge : item.badges()) {
+                    Label badgeLabel = new Label(badge);
+                    badgeLabel.getStyleClass().addAll("chain-badge", badgeClassFor(badge));
+                    badgePane.getChildren().add(badgeLabel);
+                }
+
+                VBox box = new VBox(4, subjectLabel, metaLabel, badgePane);
+                box.getStyleClass().add("chain-node");
+                setText(null);
+                setGraphic(box);
+            }
+        });
+        chainTreeWrapper.getChildren().setAll(chainTree);
+    }
+
+    private String badgeClassFor(String badge) {
+        String normalized = badge.toLowerCase(Locale.ROOT)
+                .replace(" ", "-")
+                .replace("/", "-");
+        return "badge-" + normalized;
     }
 
     private Label sectionTitle(String title) {
@@ -197,6 +270,7 @@ public class MainWindow {
                 table.setItems(null);
                 filteredCertificates = null;
                 detailsArea.clear();
+                clearChainView();
                 pathLabel.setText("No truststore loaded");
                 bannerLabel.setVisible(false);
                 bannerLabel.setManaged(false);
@@ -483,15 +557,65 @@ public class MainWindow {
     private void renderDetails(CertificateRecord record) {
         if (record == null) {
             detailsArea.clear();
+            clearChainView();
             return;
         }
         try {
             TrustStoreDocument document = documentProperty.get();
             ChainAnalysisResult analysis = document == null ? null : chainAnalysisService.analyze(document, record);
             detailsArea.setText(CertificateFormatter.formatCertificateDetails(record.certificate(), analysis));
+            renderChain(analysis);
         } catch (Exception ex) {
             detailsArea.setText("Could not render certificate details: " + ex.getMessage());
+            clearChainView();
         }
+    }
+
+    private void renderChain(ChainAnalysisResult analysis) {
+        if (analysis == null || analysis.nodes().isEmpty()) {
+            clearChainView();
+            return;
+        }
+
+        TreeItem<ChainAnalysisNode> invisibleRoot = new TreeItem<>(null);
+        invisibleRoot.setExpanded(true);
+        invisibleRoot.getChildren().add(buildVisibleChain(analysis.nodes(), 0));
+        chainTree.setRoot(invisibleRoot);
+        double preferredHeight = estimateChainHeight(analysis.nodes().size());
+        chainTree.setPrefHeight(preferredHeight);
+        chainTreeWrapper.setPrefHeight(preferredHeight);
+        chainSummaryLabel.setText(chainSummaryText(analysis));
+    }
+
+    private double estimateChainHeight(int nodeCount) {
+        double estimated = 20 + (nodeCount * CHAIN_ROW_ESTIMATE);
+        return Math.max(CHAIN_PANEL_MIN_HEIGHT, Math.min(CHAIN_PANEL_MAX_HEIGHT, estimated));
+    }
+
+    private TreeItem<ChainAnalysisNode> buildVisibleChain(List<ChainAnalysisNode> nodes, int index) {
+        TreeItem<ChainAnalysisNode> item = new TreeItem<>(nodes.get(index));
+        item.setExpanded(true);
+        if (index + 1 < nodes.size()) {
+            item.getChildren().add(buildVisibleChain(nodes, index + 1));
+        }
+        return item;
+    }
+
+    private String chainSummaryText(ChainAnalysisResult analysis) {
+        if (analysis.chainBuildComplete()) {
+            return "Chain built successfully to trust anchor " + analysis.trustAnchorAlias() + ".";
+        }
+        if (analysis.missingIssuer()) {
+            return "Chain is incomplete. A matching issuer was not found in this truststore.";
+        }
+        return "Chain information is partial for this certificate.";
+    }
+
+    private void clearChainView() {
+        chainTree.setRoot(null);
+        chainTree.setPrefHeight(CHAIN_PANEL_MIN_HEIGHT);
+        chainTreeWrapper.setPrefHeight(CHAIN_PANEL_MIN_HEIGHT);
+        chainSummaryLabel.setText("Select a certificate to inspect its trust chain.");
     }
 
     private void handleCloseRequest(WindowEvent event) {

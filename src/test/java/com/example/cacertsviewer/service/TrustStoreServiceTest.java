@@ -107,6 +107,10 @@ class TrustStoreServiceTest {
         assertFalse(analysis.missingIssuer());
         assertEquals("root-ca", analysis.trustAnchorAlias());
         assertEquals(2, analysis.chainSubjects().size());
+        assertEquals(2, analysis.nodes().size());
+        assertEquals("Selected Certificate", analysis.nodes().get(0).role());
+        assertEquals("Trust Anchor", analysis.nodes().get(1).role());
+        assertTrue(analysis.nodes().get(1).badges().contains("Root in store"));
     }
 
     @Test
@@ -126,5 +130,7 @@ class TrustStoreServiceTest {
         assertFalse(analysis.chainBuildComplete());
         assertTrue(analysis.missingIssuer());
         assertNull(analysis.trustAnchorAlias());
+        assertEquals("Missing Issuer", analysis.nodes().get(1).role());
+        assertTrue(analysis.nodes().get(1).badges().contains("Missing issuer"));
     }
 }

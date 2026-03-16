@@ -21,10 +21,18 @@ public class ChainAnalysisService {
         boolean certificateAuthority = certificate.getBasicConstraints() >= 0;
         List<String> chainSubjects = new ArrayList<>();
         List<String> diagnostics = new ArrayList<>();
+        List<ChainAnalysisNode> nodes = new ArrayList<>();
         Set<String> visitedSubjects = new HashSet<>();
 
         X509Certificate current = certificate;
         chainSubjects.add(formatSubject(current));
+        nodes.add(new ChainAnalysisNode(
+                record.alias(),
+                formatSubject(current),
+                "Selected Certificate",
+                selectedBadges(record, certificateAuthority, selfSigned)
+        ));
+
         boolean chainBuildComplete = false;
         boolean missingIssuer = false;
         String trustAnchorAlias = selfSigned ? record.alias() : null;
@@ -39,6 +47,12 @@ public class ChainAnalysisService {
         if (selfSigned) {
             chainBuildComplete = true;
             diagnostics.add("The certificate appears to be self-signed.");
+            nodes.set(0, new ChainAnalysisNode(
+                    record.alias(),
+                    formatSubject(current),
+                    "Trust Anchor",
+                    selectedBadges(record, certificateAuthority, true)
+            ));
         } else {
             while (true) {
                 String currentSubject = current.getSubjectX500Principal().getName(X500Principal.RFC2253);
@@ -51,6 +65,12 @@ public class ChainAnalysisService {
                 if (issuerRecord.isEmpty()) {
                     missingIssuer = true;
                     diagnostics.add("No issuer certificate in this truststore could be matched to the selected certificate.");
+                    nodes.add(new ChainAnalysisNode(
+                            null,
+                            CertificateFormatter.shortDn(current.getIssuerX500Principal().getName()),
+                            "Missing Issuer",
+                            List.of("Missing issuer")
+                    ));
                     break;
                 }
 
@@ -63,7 +83,15 @@ public class ChainAnalysisService {
                     diagnostics.add("Found likely issuer match in truststore alias '" + issuer.record().alias() + "' based on issuer/subject names, but signature verification did not complete.");
                 }
 
-                if (isLikelySelfSigned(current)) {
+                boolean issuerSelfSigned = isLikelySelfSigned(current);
+                nodes.add(new ChainAnalysisNode(
+                        issuer.record().alias(),
+                        formatSubject(current),
+                        issuerSelfSigned ? "Trust Anchor" : "Issuer",
+                        issuerBadges(issuer, issuerSelfSigned)
+                ));
+
+                if (issuerSelfSigned) {
                     trustAnchorAlias = issuer.record().alias();
                     chainBuildComplete = true;
                     diagnostics.add("Chain terminates at a likely self-signed trust anchor alias '" + issuer.record().alias() + "'.");
@@ -80,7 +108,8 @@ public class ChainAnalysisService {
                 missingIssuer,
                 trustAnchorAlias,
                 List.copyOf(chainSubjects),
-                List.copyOf(diagnostics)
+                List.copyOf(diagnostics),
+                List.copyOf(nodes)
         );
     }
 
@@ -100,6 +129,40 @@ public class ChainAnalysisService {
             return Optional.of(new IssuerMatch(candidates.get(0), false));
         }
         return Optional.empty();
+    }
+
+    private List<String> selectedBadges(CertificateRecord record, boolean certificateAuthority, boolean selfSigned) {
+        List<String> badges = new ArrayList<>();
+        badges.add("Trusted");
+        badges.add(certificateAuthority ? "CA" : "End-entity");
+        if (selfSigned) {
+            badges.add("Self-signed");
+            badges.add("Root in store");
+        }
+        if (record.expired()) {
+            badges.add("Expired");
+        }
+        if (record.notYetValid()) {
+            badges.add("Not yet valid");
+        }
+        return List.copyOf(badges);
+    }
+
+    private List<String> issuerBadges(IssuerMatch issuer, boolean selfSigned) {
+        List<String> badges = new ArrayList<>();
+        badges.add(issuer.signatureVerified() ? "Verified" : "Likely match");
+        badges.add("Trusted");
+        if (issuer.record().certificate().getBasicConstraints() >= 0) {
+            badges.add("CA");
+        }
+        if (selfSigned) {
+            badges.add("Self-signed");
+            badges.add("Root in store");
+        }
+        if (issuer.record().expired()) {
+            badges.add("Expired");
+        }
+        return List.copyOf(badges);
     }
 
     private boolean verifiesAgainst(X509Certificate certificate, PublicKey publicKey) {

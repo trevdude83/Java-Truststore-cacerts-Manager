@@ -45,7 +45,8 @@
 .text-field,
 .text-area,
 .table-view,
-.list-view {
+.list-view,
+.tree-view {
     -fx-background-radius: 12;
     -fx-border-radius: 12;
     -fx-border-color: #c4d0da;
@@ -125,6 +126,89 @@
     -fx-text-fill: #5e4306;
     -fx-padding: 10 16 10 16;
     -fx-font-weight: 700;
+}
+
+.chain-panel {
+    -fx-background-color: linear-gradient(to bottom, #f8fbfe, #f1f6fb);
+    -fx-background-radius: 14;
+    -fx-border-color: #c9d6e1;
+    -fx-border-radius: 14;
+}
+
+.chain-tree-wrapper {
+    -fx-alignment: center;
+}
+
+.chain-tree {
+    -fx-background-color: transparent;
+    -fx-border-color: #d3dde6;
+    -fx-control-inner-background: white;
+    -fx-background-insets: 0;
+}
+
+.chain-tree .viewport {
+    -fx-background-color: transparent;
+}
+
+.chain-tree .tree-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 4 6 4 6;
+}
+
+.chain-tree .tree-disclosure-node {
+    -fx-padding: 8 6 0 0;
+}
+
+.chain-node {
+    -fx-background-color: white;
+    -fx-background-radius: 12;
+    -fx-border-color: #dbe5ed;
+    -fx-border-radius: 12;
+    -fx-padding: 10;
+}
+
+.chain-subject {
+    -fx-font-weight: 700;
+    -fx-text-fill: #16354d;
+}
+
+.chain-meta {
+    -fx-text-fill: #5b7084;
+    -fx-font-size: 11px;
+}
+
+.chain-badge {
+    -fx-font-size: 11px;
+    -fx-font-weight: 700;
+    -fx-padding: 4 8 4 8;
+    -fx-background-radius: 999;
+    -fx-border-radius: 999;
+}
+
+.badge-trusted,
+.badge-root-in-store,
+.badge-ca,
+.badge-verified {
+    -fx-background-color: #dcefdc;
+    -fx-text-fill: #245d24;
+}
+
+.badge-self-signed,
+.badge-likely-match {
+    -fx-background-color: #e4eef9;
+    -fx-text-fill: #1f4f86;
+}
+
+.badge-missing-issuer,
+.badge-expired {
+    -fx-background-color: #fde3e3;
+    -fx-text-fill: #8b2323;
+}
+
+.badge-end-entity,
+.badge-not-yet-valid {
+    -fx-background-color: #fff0cf;
+    -fx-text-fill: #7a5710;
 }
 
 .details-area {
