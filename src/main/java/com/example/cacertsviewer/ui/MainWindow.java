@@ -4,6 +4,8 @@ import com.example.cacertsviewer.model.BackupRecord;
 import com.example.cacertsviewer.model.CertificateRecord;
 import com.example.cacertsviewer.model.TrustStoreDocument;
 import com.example.cacertsviewer.service.BackupService;
+import com.example.cacertsviewer.service.ChainAnalysisResult;
+import com.example.cacertsviewer.service.ChainAnalysisService;
 import com.example.cacertsviewer.service.PasswordAwareLoadResult;
 import com.example.cacertsviewer.service.SystemTrustStoreLocator;
 import com.example.cacertsviewer.service.TrustStoreService;
@@ -41,6 +43,7 @@ public class MainWindow {
     private final BorderPane root = new BorderPane();
     private final TrustStoreService trustStoreService = new TrustStoreService();
     private final BackupService backupService = new BackupService();
+    private final ChainAnalysisService chainAnalysisService = new ChainAnalysisService();
     private final SystemTrustStoreLocator trustStoreLocator = new SystemTrustStoreLocator();
     private final ObjectProperty<TrustStoreDocument> documentProperty = new SimpleObjectProperty<>();
     private final ObjectProperty<CertificateRecord> selectedRecord = new SimpleObjectProperty<>();
@@ -483,7 +486,9 @@ public class MainWindow {
             return;
         }
         try {
-            detailsArea.setText(CertificateFormatter.formatCertificateDetails(record.certificate()));
+            TrustStoreDocument document = documentProperty.get();
+            ChainAnalysisResult analysis = document == null ? null : chainAnalysisService.analyze(document, record);
+            detailsArea.setText(CertificateFormatter.formatCertificateDetails(record.certificate(), analysis));
         } catch (Exception ex) {
             detailsArea.setText("Could not render certificate details: " + ex.getMessage());
         }

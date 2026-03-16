@@ -1,6 +1,7 @@
 package com.example.cacertsviewer.service;
 
 import com.example.cacertsviewer.model.BackupRecord;
+import com.example.cacertsviewer.model.CertificateRecord;
 import com.example.cacertsviewer.model.TrustStoreDocument;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -15,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class TrustStoreServiceTest {
     private final TrustStoreService trustStoreService = new TrustStoreService();
     private final BackupService backupService = new BackupService();
+    private final ChainAnalysisService chainAnalysisService = new ChainAnalysisService();
 
     @TempDir
     Path tempDir;
@@ -83,5 +85,46 @@ class TrustStoreServiceTest {
         backupService.restoreBackup(backupRecord);
 
         assertEquals("original", Files.readString(storePath));
+    }
+
+    @Test
+    void buildsChainToTrustAnchorWhenIssuerExistsInStore() throws Exception {
+        TrustStoreDocument document = trustStoreService.createEmpty("JKS", "changeit".toCharArray());
+        X509Certificate root = TestCertificateFactory.createRootCertificate();
+        X509Certificate leaf = TestCertificateFactory.createLeafCertificate();
+        trustStoreService.importCertificate(document, "root-ca", root, false);
+        trustStoreService.importCertificate(document, "service-cert", leaf, false);
+
+        CertificateRecord leafRecord = document.getCertificates().stream()
+                .filter(record -> record.alias().equals("service-cert"))
+                .findFirst()
+                .orElseThrow();
+
+        ChainAnalysisResult analysis = chainAnalysisService.analyze(document, leafRecord);
+
+        assertTrue(analysis.trustedDirectly());
+        assertTrue(analysis.chainBuildComplete());
+        assertFalse(analysis.missingIssuer());
+        assertEquals("root-ca", analysis.trustAnchorAlias());
+        assertEquals(2, analysis.chainSubjects().size());
+    }
+
+    @Test
+    void reportsMissingIssuerWhenChainCannotBeBuilt() throws Exception {
+        TrustStoreDocument document = trustStoreService.createEmpty("JKS", "changeit".toCharArray());
+        X509Certificate leaf = TestCertificateFactory.createLeafCertificate();
+        trustStoreService.importCertificate(document, "service-cert", leaf, false);
+
+        CertificateRecord leafRecord = document.getCertificates().stream()
+                .filter(record -> record.alias().equals("service-cert"))
+                .findFirst()
+                .orElseThrow();
+
+        ChainAnalysisResult analysis = chainAnalysisService.analyze(document, leafRecord);
+
+        assertTrue(analysis.trustedDirectly());
+        assertFalse(analysis.chainBuildComplete());
+        assertTrue(analysis.missingIssuer());
+        assertNull(analysis.trustAnchorAlias());
     }
 }

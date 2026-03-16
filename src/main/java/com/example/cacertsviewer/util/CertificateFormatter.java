@@ -1,5 +1,7 @@
 package com.example.cacertsviewer.util;
 
+import com.example.cacertsviewer.service.ChainAnalysisResult;
+
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.PublicKey;
@@ -25,7 +27,7 @@ public final class CertificateFormatter {
         return parts.length == 0 ? dn : parts[0].trim();
     }
 
-    public static String formatCertificateDetails(X509Certificate certificate) throws GeneralSecurityException {
+    public static String formatCertificateDetails(X509Certificate certificate, ChainAnalysisResult analysis) throws GeneralSecurityException {
         StringBuilder builder = new StringBuilder();
         builder.append("Subject: ").append(certificate.getSubjectX500Principal().getName()).append('\n');
         builder.append("Issuer: ").append(certificate.getIssuerX500Principal().getName()).append('\n');
@@ -41,7 +43,29 @@ public final class CertificateFormatter {
         builder.append("Subject Alternative Names: ").append(formatSan(certificate)).append('\n');
         builder.append("SHA-1: ").append(FingerprintUtils.fingerprintSha1(certificate)).append('\n');
         builder.append("SHA-256: ").append(FingerprintUtils.fingerprintSha256(certificate)).append('\n');
+        if (analysis != null) {
+            builder.append('\n').append(formatChainAnalysis(analysis));
+        }
         builder.append('\n').append(toPem(certificate));
+        return builder.toString();
+    }
+
+    public static String formatChainAnalysis(ChainAnalysisResult analysis) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("Chain Analysis").append('\n');
+        builder.append("Stored Directly: ").append(analysis.trustedDirectly() ? "Yes" : "No").append('\n');
+        builder.append("Self-Signed: ").append(analysis.selfSigned() ? "Yes" : "No").append('\n');
+        builder.append("CA Certificate: ").append(analysis.certificateAuthority() ? "Yes" : "No").append('\n');
+        builder.append("Chain Built To Trust Anchor: ").append(analysis.chainBuildComplete() ? "Yes" : "No").append('\n');
+        builder.append("Missing Issuer In Truststore: ").append(analysis.missingIssuer() ? "Yes" : "No").append('\n');
+        builder.append("Trust Anchor Alias: ").append(analysis.trustAnchorAlias() == null ? "None" : analysis.trustAnchorAlias()).append('\n');
+        builder.append("Chain Path: ").append(analysis.chainSubjects().isEmpty() ? "Unavailable" : String.join(" -> ", analysis.chainSubjects())).append('\n');
+        if (!analysis.diagnostics().isEmpty()) {
+            builder.append("Diagnostics:").append('\n');
+            for (String line : analysis.diagnostics()) {
+                builder.append("- ").append(line).append('\n');
+            }
+        }
         return builder.toString();
     }
 

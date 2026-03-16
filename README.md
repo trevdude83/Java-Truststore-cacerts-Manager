@@ -75,6 +75,7 @@ Managing Java truststores is often more awkward than it needs to be. This projec
   - PEM/text view
 - Copy details to the clipboard
 - Export selected certificates as `.cer` or `.pem`
+- Show chain-building diagnostics, likely issuer matches, and trust-anchor information
 
 ### Editing and safety
 
@@ -203,7 +204,6 @@ For a Windows installer, change `--type app-image` to `exe` once the required pa
 
 - Recent files and lightweight preferences
 - CSV export of certificate lists
-- Richer certificate chain and trust anchor analysis
 - Bulk import improvements
 - Optional theme variants
 
